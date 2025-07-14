@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html>
+<head>
+    
+    <meta http-equiv="content-type" content="text/html; charset=UTF-8" />
+    
+        <script>
+            L_NO_TOUCH = false;
+            L_DISABLE_3D = false;
+        </script>
+    
+    <style>html, body {width: 100%;height: 100%;margin: 0;padding: 0;}</style>
+    <style>#map {position:absolute;top:0;bottom:0;right:0;left:0;}</style>
+    <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.js"></script>
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/leaflet@1.9.3/dist/leaflet.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.2.2/dist/css/bootstrap.min.css"/>
+    <link rel="stylesheet" href="https://netdna.bootstrapcdn.com/bootstrap/3.0.0/css/bootstrap-glyphicons.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@fortawesome/fontawesome-free@6.2.0/css/all.min.css"/>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/Leaflet.awesome-markers/2.0.2/leaflet.awesome-markers.css"/>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/python-visualization/folium/folium/templates/leaflet.awesome.rotate.min.css"/>
+    
+            <meta name="viewport" content="width=device-width,
+                initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+            <style>
+                #map_a0c24492636e073bd82c813ad9d3504c {
+                    position: relative;
+                    width: 100.0%;
+                    height: 100.0%;
+                    left: 0.0%;
+                    top: 0.0%;
+                }
+                .leaflet-container { font-size: 1rem; }
+            </style>
+        
+</head>
+<body>
+    
+    
+            <div class="folium-map" id="map_a0c24492636e073bd82c813ad9d3504c" ></div>
+        
+</body>
+<script>
+    
+    
+            var map_a0c24492636e073bd82c813ad9d3504c = L.map(
+                "map_a0c24492636e073bd82c813ad9d3504c",
+                {
+                    center: [-37.8081812, 144.95571633333336],
+                    crs: L.CRS.EPSG3857,
+                    ...{
+  "zoom": 13,
+  "zoomControl": true,
+  "preferCanvas": false,
+}
+
+                }
+            );
+
+            
+
+        
+    
+            var tile_layer_2babddbfcbec731361446142a5062458 = L.tileLayer(
+                "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+                {
+  "minZoom": 0,
+  "maxZoom": 19,
+  "maxNativeZoom": 19,
+  "noWrap": false,
+  "attribution": "\u0026copy; \u003ca href=\"https://www.openstreetmap.org/copyright\"\u003eOpenStreetMap\u003c/a\u003e contributors",
+  "subdomains": "abc",
+  "detectRetina": false,
+  "tms": false,
+  "opacity": 1,
+}
+
+            );
+        
+    
+            tile_layer_2babddbfcbec731361446142a5062458.addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var poly_line_cceebd7a03f91280e6c6feccb3e01939 = L.polyline(
+                [[-37.8209086, 144.9787358], [-37.82096278, 144.9584257], [-37.82490405, 144.9522883]],
+                {"bubblingMouseEvents": true, "color": "blue", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "blue", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            poly_line_cceebd7a03f91280e6c6feccb3e01939.bindTooltip(
+                `<div>
+                     Route 1
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_9866811f3d6b829c6fa1d6ab10decb48 = L.marker(
+                [-37.8209086, 144.9787358],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_b8e026beeb8e40a6984ed7216cf6d1f2 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "blue",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_1aa22430e91746a349f131b5a912fa1e = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_523bf1ca63bd3195001866428ec676bd = $(`<div id="html_523bf1ca63bd3195001866428ec676bd" style="width: 100.0%; height: 100.0%;">Route 1: Melbourne Park</div>`)[0];
+                popup_1aa22430e91746a349f131b5a912fa1e.setContent(html_523bf1ca63bd3195001866428ec676bd);
+            
+        
+
+        marker_9866811f3d6b829c6fa1d6ab10decb48.bindPopup(popup_1aa22430e91746a349f131b5a912fa1e)
+        ;
+
+        
+    
+    
+                marker_9866811f3d6b829c6fa1d6ab10decb48.setIcon(icon_b8e026beeb8e40a6984ed7216cf6d1f2);
+            
+    
+            var marker_e8ec8c10360bcd41ca5b685e01b3c688 = L.marker(
+                [-37.82096278, 144.9584257],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_c10091ce9fad88d1dc3a06f060bdb726 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "blue",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_47975989179d22afddfbc9415522c420 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_43225e3d6b5c52e49986d9521d133bea = $(`<div id="html_43225e3d6b5c52e49986d9521d133bea" style="width: 100.0%; height: 100.0%;">Route 1: Melbourne Aquarium</div>`)[0];
+                popup_47975989179d22afddfbc9415522c420.setContent(html_43225e3d6b5c52e49986d9521d133bea);
+            
+        
+
+        marker_e8ec8c10360bcd41ca5b685e01b3c688.bindPopup(popup_47975989179d22afddfbc9415522c420)
+        ;
+
+        
+    
+    
+                marker_e8ec8c10360bcd41ca5b685e01b3c688.setIcon(icon_c10091ce9fad88d1dc3a06f060bdb726);
+            
+    
+            var marker_8a71fc0c0120a31cb6359ab5009d8619 = L.marker(
+                [-37.82490405, 144.9522883],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_dc1b0fe7a7149b077b03a3bd74422b74 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "blue",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_7cd3329ea271750973f9390b855f39c2 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_5340337b8c94488e7eb2beecbe5e3b72 = $(`<div id="html_5340337b8c94488e7eb2beecbe5e3b72" style="width: 100.0%; height: 100.0%;">Route 1: Melbourne Convention Centre</div>`)[0];
+                popup_7cd3329ea271750973f9390b855f39c2.setContent(html_5340337b8c94488e7eb2beecbe5e3b72);
+            
+        
+
+        marker_8a71fc0c0120a31cb6359ab5009d8619.bindPopup(popup_7cd3329ea271750973f9390b855f39c2)
+        ;
+
+        
+    
+    
+                marker_8a71fc0c0120a31cb6359ab5009d8619.setIcon(icon_dc1b0fe7a7149b077b03a3bd74422b74);
+            
+    
+            var poly_line_43858c03e406731ae56f4eef817d222a = L.polyline(
+                [[-37.82132521, 144.9775911], [-37.81697414, 144.954862], [-37.82425743, 144.9534781]],
+                {"bubblingMouseEvents": true, "color": "green", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "green", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            poly_line_43858c03e406731ae56f4eef817d222a.bindTooltip(
+                `<div>
+                     Route 2
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_e230081c2c787054042b34ac2d757636 = L.marker(
+                [-37.82132521, 144.9775911],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_3181ff7e8353b58c4f58ebd721a38895 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "green",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_970a9633de0437056feb97c8cd8a36aa = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_f7ccfc1c2a60e128c5e9b0ddcbc11cc2 = $(`<div id="html_f7ccfc1c2a60e128c5e9b0ddcbc11cc2" style="width: 100.0%; height: 100.0%;">Route 2: Margaret Court Arena</div>`)[0];
+                popup_970a9633de0437056feb97c8cd8a36aa.setContent(html_f7ccfc1c2a60e128c5e9b0ddcbc11cc2);
+            
+        
+
+        marker_e230081c2c787054042b34ac2d757636.bindPopup(popup_970a9633de0437056feb97c8cd8a36aa)
+        ;
+
+        
+    
+    
+                marker_e230081c2c787054042b34ac2d757636.setIcon(icon_3181ff7e8353b58c4f58ebd721a38895);
+            
+    
+            var marker_150835a4b2691fa588c752ef20462ed6 = L.marker(
+                [-37.81697414, 144.954862],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_bd9229e60f666b1d9dfafa4a51220ab1 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "green",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_7bfc31ee0f663fecc3356e0cd1ec9750 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_b35b19313e9eb6dfe1070a26a3163827 = $(`<div id="html_b35b19313e9eb6dfe1070a26a3163827" style="width: 100.0%; height: 100.0%;">Route 2: St Augustines Church</div>`)[0];
+                popup_7bfc31ee0f663fecc3356e0cd1ec9750.setContent(html_b35b19313e9eb6dfe1070a26a3163827);
+            
+        
+
+        marker_150835a4b2691fa588c752ef20462ed6.bindPopup(popup_7bfc31ee0f663fecc3356e0cd1ec9750)
+        ;
+
+        
+    
+    
+                marker_150835a4b2691fa588c752ef20462ed6.setIcon(icon_bd9229e60f666b1d9dfafa4a51220ab1);
+            
+    
+            var marker_a19bbd8c47deff1c7b004429ff47e467 = L.marker(
+                [-37.82425743, 144.9534781],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_34d325da8c73bc606609c40c2fccae91 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "green",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_b2dcf8d71c43b395e392c0ce9d782873 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_7ec2ee0aa01390e35a703256c8fc04d7 = $(`<div id="html_7ec2ee0aa01390e35a703256c8fc04d7" style="width: 100.0%; height: 100.0%;">Route 2: Polly Woodside</div>`)[0];
+                popup_b2dcf8d71c43b395e392c0ce9d782873.setContent(html_7ec2ee0aa01390e35a703256c8fc04d7);
+            
+        
+
+        marker_a19bbd8c47deff1c7b004429ff47e467.bindPopup(popup_b2dcf8d71c43b395e392c0ce9d782873)
+        ;
+
+        
+    
+    
+                marker_a19bbd8c47deff1c7b004429ff47e467.setIcon(icon_34d325da8c73bc606609c40c2fccae91);
+            
+    
+            var poly_line_4f8d57a4a68cc13d9342d419e37eb222 = L.polyline(
+                [[-37.78230979, 144.9108221], [-37.81188478, 144.9624226], [-37.81438513, 144.969174]],
+                {"bubblingMouseEvents": true, "color": "red", "dashArray": null, "dashOffset": null, "fill": false, "fillColor": "red", "fillOpacity": 0.2, "fillRule": "evenodd", "lineCap": "round", "lineJoin": "round", "noClip": false, "opacity": 0.8, "smoothFactor": 1.0, "stroke": true, "weight": 4}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            poly_line_4f8d57a4a68cc13d9342d419e37eb222.bindTooltip(
+                `<div>
+                     Route 3
+                 </div>`,
+                {
+  "sticky": true,
+}
+            );
+        
+    
+            var marker_47e8d15527ad759397b8688e9a077310 = L.marker(
+                [-37.78230979, 144.9108221],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_8c3c314eb11eb54c421a997e6b9b382e = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_f338b0f66a0d96eecbaffadae7ff512d = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_38346cb8f64ab7ba770e57b50f2ac387 = $(`<div id="html_38346cb8f64ab7ba770e57b50f2ac387" style="width: 100.0%; height: 100.0%;">Route 3: Melbourne Showgrounds</div>`)[0];
+                popup_f338b0f66a0d96eecbaffadae7ff512d.setContent(html_38346cb8f64ab7ba770e57b50f2ac387);
+            
+        
+
+        marker_47e8d15527ad759397b8688e9a077310.bindPopup(popup_f338b0f66a0d96eecbaffadae7ff512d)
+        ;
+
+        
+    
+    
+                marker_47e8d15527ad759397b8688e9a077310.setIcon(icon_8c3c314eb11eb54c421a997e6b9b382e);
+            
+    
+            var marker_e1e56ec3d3d907632f0d04d8f2a7a9c9 = L.marker(
+                [-37.81188478, 144.9624226],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_7fddd0f2473ae6dfe4cb1afbe095d053 = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_e97f63ea4ebb749b18f17b90231bc079 = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_9e3a458d859eba243e1d18edb80f67a2 = $(`<div id="html_9e3a458d859eba243e1d18edb80f67a2" style="width: 100.0%; height: 100.0%;">Route 3: St Francis Church</div>`)[0];
+                popup_e97f63ea4ebb749b18f17b90231bc079.setContent(html_9e3a458d859eba243e1d18edb80f67a2);
+            
+        
+
+        marker_e1e56ec3d3d907632f0d04d8f2a7a9c9.bindPopup(popup_e97f63ea4ebb749b18f17b90231bc079)
+        ;
+
+        
+    
+    
+                marker_e1e56ec3d3d907632f0d04d8f2a7a9c9.setIcon(icon_7fddd0f2473ae6dfe4cb1afbe095d053);
+            
+    
+            var marker_b90a25f6400b8b7f3c99506e097c1d2c = L.marker(
+                [-37.81438513, 144.969174],
+                {
+}
+            ).addTo(map_a0c24492636e073bd82c813ad9d3504c);
+        
+    
+            var icon_9fbd33847f5c74d1f5302dbeb5ab9b5c = L.AwesomeMarkers.icon(
+                {
+  "markerColor": "red",
+  "iconColor": "white",
+  "icon": "info-sign",
+  "prefix": "glyphicon",
+  "extraClasses": "fa-rotate-0",
+}
+            );
+        
+    
+        var popup_0662c3ecccdb967d6b5a2fb38a3cb53d = L.popup({
+  "maxWidth": "100%",
+});
+
+        
+            
+                var html_80a3d1cc095677e875f77e3921087148 = $(`<div id="html_80a3d1cc095677e875f77e3921087148" style="width: 100.0%; height: 100.0%;">Route 3: St Michael's Uniting Church</div>`)[0];
+                popup_0662c3ecccdb967d6b5a2fb38a3cb53d.setContent(html_80a3d1cc095677e875f77e3921087148);
+            
+        
+
+        marker_b90a25f6400b8b7f3c99506e097c1d2c.bindPopup(popup_0662c3ecccdb967d6b5a2fb38a3cb53d)
+        ;
+
+        
+    
+    
+                marker_b90a25f6400b8b7f3c99506e097c1d2c.setIcon(icon_9fbd33847f5c74d1f5302dbeb5ab9b5c);
+            
+</script>
+</html>
