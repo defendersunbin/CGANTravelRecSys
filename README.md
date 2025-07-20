@@ -3,7 +3,7 @@ CGAN Travel Recommendation System
 This system is a travel recommendation system made with a Conditional Generative Adversarial Network (CGAN).
 The main contribution of this system is to solve the cold-start challenge of sparse data travelers (i.e., travelers with no travel history, only traveling for a short time with places).
 
-This system has a novel algorithm made by Sunbin, an 'Anchor-and-Expand' algorithm for cold-start users who have 'zero' travel history. Yes, zero (none). You can check out my dataset and scroll all the way down and find userID: 111111. That is the cold-start user with no travel history.
+This system has a novel algorithm, an 'Anchor-and-Expand' algorithm for cold-start users who have 'zero' travel history. Yes, zero (none). You can check out the dataset and scroll all the way down and find userID: 111111. That is the cold-start user with no travel history.
 This algorithm works by: 
 1. Gather all information from a traveler with history, including visit frequency, GPS coordinates, theme/subtheme of POI places, users' preference of the POI theme/subtheme, and sequence of patterns from all users.
 2. Train with CGAN. CGAN analyzes the information from the user and makes a concept of what kind of preference this user likes, and looks through the sequence of POI with route pattern and simultaneously finds out where the user hasn't visited + where the other similar users went.
