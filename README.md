@@ -14,6 +14,6 @@ This algorithm works by:
 You can find the results by clicking the 5 cities folder (Edinburgh, Melbourne, Glasgow, Toronto, Osaka).
 This includes the training results of CGAN, t-SNE, and dimensions.
 
-This system was executed on Python 3.11.9 on Windows 11.
+This system was tested on Python 3.11.9 in Windows 11 with NVIDIA RTX 4090 GPU with 32GB of RAM.
 
-To execute the system, click the CGAN_RecSys.py and install the necessary libraries, and run it.
+To execute the system, click the CGAN_RecSys.py, install the necessary libraries, and run it.
