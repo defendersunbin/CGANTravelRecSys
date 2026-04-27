@@ -165,6 +165,20 @@ for theme in exclude_themes:
     if pref_col in df.columns:
         df[pref_col] = 0.0
 
+def count_valid_pois_in_row(row):
+    return sum(
+        1 for col in moving_cols
+        if pd.notnull(row[col])
+    )
+
+df['valid_poi_count_after_filter'] = df.apply(count_valid_pois_in_row, axis=1)
+df = df[df['valid_poi_count_after_filter'] >= 3].copy()
+
+# Reset itemID after filtering so route IDs remain clean and contiguous.
+df = df.reset_index(drop=True)
+df['itemID'] = df.index.astype(str)
+
+print(f"After trajectory-length filtering: {len(df)} routes remain.")
 # -----------------------------------------------
 # 3. valid_places("without excluded themes") set
 # -----------------------------------------------
@@ -1629,21 +1643,8 @@ else:
     scaler_lat  = MinMaxScaler(feature_range=(-1, 1)).fit(X_lat_train)
     scaler_cond = StandardScaler().fit(X_cond_train)
 
-    n_quantiles_for_transform = min(1000, X_lat_train.shape[0] // 10)
-    quantile_transformer = QuantileTransformer(output_distribution='normal', 
-                                            n_quantiles=n_quantiles_for_transform,
-                                            random_state=42)
-    quantile_transformer.fit(X_lat_train[:, [0]])
-
-    print("  ▶ QuantileTransformer for dimension 0 has been fitted.")
-
     X_lat_train_scaled = scaler_lat.transform(X_lat_train) if X_lat_train.shape[0] > 0 else X_lat_train
     X_lat_test_scaled  = scaler_lat.transform(X_lat_test) if X_lat_test.shape[0] > 0 else X_lat_test
-
-    if X_lat_train.shape[0] > 0:
-        X_lat_train_scaled[:, 0] = quantile_transformer.transform(X_lat_train[:, [0]]).flatten()
-    if X_lat_test.shape[0] > 0:
-        X_lat_test_scaled[:, 0] = quantile_transformer.transform(X_lat_test[:, [0]]).flatten()
 
     X_cond_train_scaled= scaler_cond.transform(X_cond_train) if X_cond_train.shape[0] > 0 else X_cond_train
     X_cond_test_scaled = scaler_cond.transform(X_cond_test) if X_cond_test.shape[0] > 0 else X_cond_test
@@ -2046,6 +2047,8 @@ lambda_gp        = 10.0          # Gradient Penalty weight λ_GP
 lambda_cons      = 0.5           # Consistency Regularization weight λ_cons
 lambda_aux       = 0.3           # Auxiliary Regressor weight λ_aux
 perturb_std      = 0.05          # σ for z' in consistency reg.  (z' = z + N(0, σ²I))
+epsilon_cond = 0.1
+epsilon_prog = 0.1
 
 # Histories (for plotting loss curves, Fig. 5.12 in the thesis)
 d_losses_hist = []
@@ -2729,8 +2732,8 @@ def mmr_anchor_expand_score(candidate_poi, route_sequence, gen_latent,
 
     if is_novel and target_user_id in user_preferences:
         rels = [
-            user_preferences[target_user_id].get(th, 0.0)
-            for th in place_themes.get(candidate_poi, [])
+            user_pref.get(theme_to_pref_key(th), 0.0)
+            for th in place_themes.get(poi, [])
         ]
         serendipity_bonus = float(np.mean(rels)) if rels else 0.0
 
@@ -2762,27 +2765,37 @@ def recommend_routes_enhanced(target_user_id, pois_to_exclude=None, top_k_pois_p
     
     # --- Step 1: Anchor POI Selection (Cold-Start Handling) ---
     visited = user_visited_places.get(target_user_id, set())
-    if not visited:
-        anchor_pois = random.sample(list(valid_places), num_gen_routes)
-    else:
-        anchor_candidates = visited
-        if pois_to_exclude:
-            anchor_candidates -= pois_to_exclude
 
-        if not anchor_candidates:
+    anchor_pois = []
+
+    for latent_vec in generated_latents:
+        if visited:
+            anchor_candidates = set(visited)
+            if pois_to_exclude:
+                anchor_candidates -= pois_to_exclude
+        else:
             anchor_candidates = {p for p in valid_places if p in place_emb}
             if pois_to_exclude:
                 anchor_candidates -= pois_to_exclude
 
-        anchor_pois = []
-        for latent_vec in generated_latents:
-            best_anchor, max_relevance = None, -1.0
-            for poi in anchor_candidates:
-                rel = safe_cosine_sim(place_emb[poi], latent_vec)
-                if rel > max_relevance:
-                    best_anchor, max_relevance = poi, rel
-            if best_anchor:
-                anchor_pois.append(best_anchor)
+        if not anchor_candidates:
+            anchor_candidates = {p for p in valid_places if p in place_emb}
+
+        best_anchor, max_relevance = None, -1.0
+
+        for poi in anchor_candidates:
+            if poi not in place_emb:
+                continue
+
+            rel = safe_cosine_sim(place_emb[poi], latent_vec)
+
+            if rel > max_relevance:
+                best_anchor = poi
+                max_relevance = rel
+
+        if best_anchor is not None:
+            anchor_pois.append(best_anchor)
+
 
     # --- Step 2: Route Expansion ---
     
@@ -2807,9 +2820,8 @@ def recommend_routes_enhanced(target_user_id, pois_to_exclude=None, top_k_pois_p
         for _ in range(top_k_pois_per_route - 1):
             if not expansion_candidates: break
             
-            next_poi = None
-            max_score = -1
-            
+            candidate_scores = []
+
             for candidate_poi in expansion_candidates:
                 score = mmr_anchor_expand_score(
                     candidate_poi,
@@ -2822,10 +2834,26 @@ def recommend_routes_enhanced(target_user_id, pois_to_exclude=None, top_k_pois_p
                     gamma_ser=0.2
                 )
 
-                if score > max_score:
-                    max_score = score
-                    next_poi = candidate_poi
+                candidate_scores.append((candidate_poi, score))
 
+            if not candidate_scores:
+                break
+
+            # Select probabilistically from top candidates.
+            candidate_scores.sort(key=lambda x: x[1], reverse=True)
+            top_m = min(10, len(candidate_scores))
+            top_candidates = candidate_scores[:top_m]
+
+            scores = np.array([s for _, s in top_candidates], dtype=np.float64)
+
+            # Stable softmax sampling.
+            scores = scores - np.max(scores)
+            temperature = 0.2
+            probs = np.exp(scores / temperature)
+            probs = probs / (np.sum(probs) + 1e-12)
+
+            selected_idx = np.random.choice(len(top_candidates), p=probs)
+            next_poi = top_candidates[selected_idx][0]
             
             if next_poi:
                 route_sequence.append(next_poi)
@@ -2981,7 +3009,7 @@ def compute_theme_relevance(user_id, recommended_routes, user_preferences, all_t
         return 0.0
 
     user_vec = np.array([
-        user_preferences[user_id].get(theme, 0.0)
+        user_preferences[user_id].get(theme_to_pref_key(theme), 0.0)
         for theme in all_themes_list
     ], dtype=float)
 
@@ -3131,7 +3159,8 @@ def evaluate_theme_preference_strict(user_id, recommended_routes, user_preferenc
         return 0.0
 
     user_pref_vector = np.array([
-        user_preferences[user_id].get(theme, 0.0) for theme in all_themes_list
+        user_preferences[user_id].get(theme_to_pref_key(theme), 0.0)
+        for theme in all_themes_list
     ])
 
     rec_theme_counts = Counter()
@@ -3312,6 +3341,25 @@ def evaluate_pairs_f1_score(user_id: str, recommended_routes: list[dict], df: pd
 
     return {'P_pair': p_pair, 'R_pair': r_pair, 'pairs_f1': pairs_f1}
 
+def theme_to_pref_key(theme):
+    """
+    Convert raw theme name to preference-column-compatible key.
+    Example:
+        'Art Gallery' -> 'Art_Gallery'
+        'Food/Drink' -> 'Food_Drink'
+    """
+    return str(theme).replace("/", "_").replace(" ", "_").strip()
+
+
+def pref_key_to_theme_name(pref_key):
+    """
+    Convert preference key back to readable theme name.
+    Example:
+        'Art_Gallery' -> 'Art Gallery'
+    """
+    return str(pref_key).replace("_", " ").strip()
+
+
 def create_user_preferences(df):
     """Create user preference dictionary from CSV data"""
     user_preferences = {}
@@ -3399,23 +3447,35 @@ auc_val      = compute_auc(real_lat, fake_latent, D_lat, real_cond)
 # ──────────────────────────────────────────────
 # 6)  Results
 # ──────────────────────────────────────────────
-metrics_tbl = pd.DataFrame(
-    {
-        "Metric" : ["Average JSD",
-                    "Average Wasserstein Distance",
-                    "Diff. pair-wise Correlation",
-                    "AUC"],
-        "Value"  : [avg_jsd_val,
-                    avg_wd_val,
-                    diff_corr_val,
-                    auc_val]
-    }
-)
+if all(name in globals() for name in ['real_lat', 'fake_latent', 'real_cond', 'D_lat']):
+    avg_jsd_val  = avg_jsd(real_lat, fake_latent)
+    avg_wd_val   = avg_wasserstein(real_lat, fake_latent)
+    diff_corr_val= diff_pairwise_corr(real_lat, fake_latent)
+    auc_val      = compute_auc(real_lat, fake_latent, D_lat, real_cond)
 
-# Table for evaluation results
-print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-print(metrics_tbl.to_string(index=False))
-print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+    metrics_tbl = pd.DataFrame(
+        {
+            "Metric" : [
+                "Average JSD",
+                "Average Wasserstein Distance",
+                "Diff. pair-wise Correlation",
+                "AUC"
+            ],
+            "Value"  : [
+                avg_jsd_val,
+                avg_wd_val,
+                diff_corr_val,
+                auc_val
+            ]
+        }
+    )
+
+    print("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
+    print(metrics_tbl.to_string(index=False))
+    print("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n")
+else:
+    print("Latent distribution metrics skipped because CGAN evaluation variables are unavailable.")
+
 
 
 print("--- Pre-filtering users for evaluation ---")
