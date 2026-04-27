@@ -355,6 +355,22 @@ def compute_route_distance(seq, place_to_coord_map, user_id, user_visited_places
 
     return max(total_distance, 1.0) # Ensure distance is at least 1.0
 
+#############################################
+def pad_or_truncate_vector(vec, target_dim):
+    """
+    Force a vector to have exactly target_dim dimensions.
+    This prevents mismatches between route latent vectors, POI embeddings,
+    and generated latent vectors.
+    """
+    vec = np.asarray(vec, dtype=np.float32).reshape(-1)
+
+    if vec.shape[0] == target_dim:
+        return vec
+
+    if vec.shape[0] > target_dim:
+        return vec[:target_dim]
+
+    return np.pad(vec, (0, target_dim - vec.shape[0]), mode='constant')
 # -----------------------------------------------
 # 7.5. Confidence based weight and contrastive learning functions (NEW)
 # -----------------------------------------------
@@ -694,84 +710,118 @@ user_dim_meta = next(iter(user_emb_meta.values()), np.zeros(64)).shape[0]
 # -----------------------------------------------
 # 9. Route RNN → Latent
 # -----------------------------------------------
-def train_route_rnn(df_rnn, emb_size=64, max_len=10, epochs=10): # Added epochs
-    places_sorted = sorted(list(valid_places)) # Ensure places are from valid_places
-    p2i_map = {p: i+1 for i, p in enumerate(places_sorted)} # 0 is for padding
-    p2i_map['<PAD>'] = 0 # Explicit padding token
+def train_route_rnn(df_rnn, emb_size=64, max_len=10, epochs=10):
+    """
+    Thesis-compliant Route RNN.
 
-    routes_unique = df_rnn['itemID'].unique()
-    seqs = []
-    for r_id in routes_unique:
-        row = df_rnn[df_rnn['itemID'] == r_id].iloc[0] # Assuming one row per itemID for its definition
-        seq = []
-        for c in moving_cols:
-            p = row[c]
-            if pd.notnull(p) and p in p2i_map: # Check if place is valid and in map
-                seq.append(p2i_map[p])
-        if seq: # Only add non-empty sequences
-            seqs.append(seq)
-        # else:
-            # print(f"Warning: Route {r_id} resulted in empty sequence for RNN.")
+    The thesis states that the Route RNN is trained with a next-POI
+    prediction objective. After training, the softmax prediction head is
+    detached and the LSTM output is used as a route embedding.
+    """
+    places_sorted = sorted(list(valid_places))
+    p2i_map = {p: i + 1 for i, p in enumerate(places_sorted)}
+    p2i_map['<PAD>'] = 0
 
-
-    if not seqs:
-        print("Error: No valid sequences for RNN training.")
-        # Return empty embeddings or handle error
-        return {}, p2i_map, None 
-
-    X_rnn = pad_sequences(seqs, maxlen=max_len, padding='pre', value=p2i_map['<PAD>'])
-    
-    # Model
-    # Using len(p2i_map) because p2i_map includes the <PAD> token if its index is highest, or +1 if its 0
-    # input_dim should be max_index + 1
     input_dim_rnn = max(p2i_map.values()) + 1
 
-    model_rnn = Sequential([
-        KerasEmbedding(input_dim=input_dim_rnn, output_dim=emb_size, input_length=max_len, mask_zero=True), # mask_zero for padding
-        LSTM(64), # Can be same as emb_size or different
-        Dense(emb_size, activation='linear') # Output matches embedding size
-    ])
-    model_rnn.compile(optimizer='adam', loss='mse')
-    
-    # Dummy targets for autoencoder-like training (or use actual targets if available)
-    # Here, we predict the embedding itself, so a random target is not ideal.
-    # A common approach for sequence autoencoders is to try and reconstruct the input or a compressed version.
-    # For simplicity, let's use a placeholder target, but this is not ideal for learning meaningful embeddings.
-    # A better approach would be a sequence-to-sequence model or predicting next POI.
-    # Given the current setup, this is more like learning a fixed-size representation.
-    
-    # Using a simple autoencoder target: predict the average embedding of input POIs (conceptual)
-    # For now, keeping the random target as in original to avoid major restructuring here.
-    # This part can be significantly improved with a more principled RNN objective.
-    dummy_targets = np.random.rand(len(X_rnn), emb_size) 
-    model_rnn.fit(X_rnn, dummy_targets, epochs=epochs, batch_size=32, verbose=0)
-    
-    embeddings_rnn = model_rnn.predict(X_rnn, verbose=0)
-    
-    # Map embeddings back to original route_ids that formed the sequences
-    route_emb_map_rnn = {}
-    seq_idx = 0
-    for r_id in routes_unique: # Iterate in the same order as seqs were created
+    routes_unique = df_rnn['itemID'].unique()
+    route_sequences = {}
+    training_prefixes = []
+    training_targets = []
+
+    for r_id in routes_unique:
         row = df_rnn[df_rnn['itemID'] == r_id].iloc[0]
-        temp_seq = []
+        seq = []
+
         for c in moving_cols:
             p = row[c]
             if pd.notnull(p) and p in p2i_map:
-                temp_seq.append(p2i_map[p])
-        if temp_seq: # If this route contributed a sequence
-            route_emb_map_rnn[r_id] = embeddings_rnn[seq_idx]
-            seq_idx +=1
-        else: # Route had no valid POIs for RNN
-            route_emb_map_rnn[r_id] = np.zeros(emb_size)
+                seq.append(p2i_map[p])
 
+        if seq:
+            route_sequences[r_id] = seq
 
-    # Fallback for any routes that might not have been processed if they had no POIs
-    for r_id in routes_unique:
-        if r_id not in route_emb_map_rnn:
-            route_emb_map_rnn[r_id] = np.zeros(emb_size)
+            # next-POI prediction samples:
+            # [p1] -> p2, [p1,p2] -> p3, ...
+            if len(seq) >= 2:
+                for t in range(1, len(seq)):
+                    training_prefixes.append(seq[:t])
+                    training_targets.append(seq[t])
+        else:
+            route_sequences[r_id] = []
 
+    if not training_prefixes:
+        print("Warning: Not enough sequential POI data for next-POI RNN training.")
+        route_emb_map = {r_id: np.zeros(emb_size) for r_id in routes_unique}
+        return route_emb_map, p2i_map, None
 
-    return route_emb_map_rnn, p2i_map, model_rnn
+    X_train = pad_sequences(
+        training_prefixes,
+        maxlen=max_len,
+        padding='pre',
+        value=p2i_map['<PAD>']
+    )
+
+    y_train = np.array(training_targets, dtype=np.int32)
+
+    seq_input = Input(shape=(max_len,), name="route_sequence_input")
+
+    emb = KerasEmbedding(
+        input_dim=input_dim_rnn,
+        output_dim=emb_size,
+        mask_zero=True,
+        name="route_poi_embedding"
+    )(seq_input)
+
+    lstm_out = LSTM(64, name="route_lstm")(emb)
+
+    pred = Dense(
+        input_dim_rnn,
+        activation="softmax",
+        name="next_poi_softmax"
+    )(lstm_out)
+
+    model_rnn = Model(seq_input, pred, name="RouteRNN_NextPOI")
+
+    model_rnn.compile(
+        optimizer=Adam(learning_rate=0.001),
+        loss="sparse_categorical_crossentropy",
+        metrics=["accuracy"]
+    )
+
+    model_rnn.fit(
+        X_train,
+        y_train,
+        epochs=epochs,
+        batch_size=32,
+        verbose=0
+    )
+
+    # Detach the softmax prediction head.
+    # Use the LSTM output as route embedding.
+    encoder = Model(
+        inputs=model_rnn.input,
+        outputs=model_rnn.get_layer("route_lstm").output,
+        name="RouteRNN_Encoder"
+    )
+
+    route_emb_map = {}
+
+    for r_id, seq in route_sequences.items():
+        if seq:
+            X_full = pad_sequences(
+                [seq],
+                maxlen=max_len,
+                padding='pre',
+                value=p2i_map['<PAD>']
+            )
+            emb_vec = encoder.predict(X_full, verbose=0)[0]
+            route_emb_map[r_id] = emb_vec
+        else:
+            route_emb_map[r_id] = np.zeros(emb_size)
+
+    return route_emb_map, p2i_map, model_rnn
+
 
 route_emb_rnn, p2i, rnn_model = train_route_rnn(df, emb_size=64, max_len=10, epochs=15)
 
@@ -812,7 +862,20 @@ else:
 
 
     # Store PCA'd latents in a dict similar to route_emb_rnn
-    route_latents_rnn_dict = {r_id: route_latents_rnn_pca_transformed[i] for i, r_id in enumerate(route_ids_rnn)}
+    # Store PCA'd latents in a dict similar to route_emb_rnn.
+    # Force the final RNN latent dimension to 64 to match the thesis setting.
+    TARGET_RNN_LATENT_DIM = 64
+
+    route_latents_rnn_dict = {
+        r_id: pad_or_truncate_vector(
+            route_latents_rnn_pca_transformed[i],
+            TARGET_RNN_LATENT_DIM
+        )
+        for i, r_id in enumerate(route_ids_rnn)
+    }
+
+    orig_latent_dim = TARGET_RNN_LATENT_DIM
+
 
     # KNN on these PCA'd RNN latents (this will be updated later after NCF merge)
     if route_latents_rnn_pca_transformed.shape[0] > 0 and orig_latent_dim > 0:
@@ -1482,7 +1545,33 @@ def create_collaborative_condition_vector(user_id, sim_model, user_ids_list, spa
     alpha = user_interaction_count / sparsity_threshold
     final_collaborative_vec = (alpha * original_cond_vec) + ((1 - alpha) * aggregated_vector)
 
-    return final_collaborative_vec.astype(np.float32) 
+    return final_collaborative_vec.astype(np.float32)
+
+def create_condition_vector_safe(user_id):
+    """
+    Creates a condition vector for both existing and cold-start users.
+
+    Existing users:
+        use collaborative condition vector.
+
+    Unknown cold-start users:
+        use population-level average condition vector.
+    """
+    if user_id in combined_user_emb:
+        return create_collaborative_condition_vector(
+            user_id,
+            sim_user_model,
+            user_ids_pref_knn,
+            sparsity_threshold=5
+        )
+
+    # Cold-start fallback: average condition from training data
+    if 'X_cond_train' in globals() and X_cond_train.shape[0] > 0:
+        return np.mean(X_cond_train, axis=0).astype(np.float32)
+
+    # Last fallback
+    return np.zeros(cond_dim, dtype=np.float32)
+    
 
 print("  ▶ Building POI-to-POI similarity model (KNN)...")
 poi_list_for_knn = list(place_emb.keys())
@@ -1565,32 +1654,6 @@ else:
 
     X_lat_train_cgan_input = X_lat_train_scaled
 
-
-if not X_lat_list or not X_cond_list:
-    print("CRITICAL: X_lat_list or X_cond_list is empty. CGAN cannot be trained.")
-else:
-    X_lat = np.vstack(X_lat_list).astype(np.float32)
-    X_cond = np.vstack(X_cond_list).astype(np.float32)
-
-    print(f"Enhanced condition vectors shape: {X_cond.shape}")
-    
-    X_lat_train, X_lat_test, X_cond_train, X_cond_test = train_test_split(
-        X_lat, X_cond, test_size=0.2, random_state=42
-    )
-
-    scaler_lat  = MinMaxScaler(feature_range=(-1, 1)).fit(X_lat_train)
-    scaler_cond = StandardScaler().fit(X_cond_train)
-
-    X_lat_train_scaled = scaler_lat.transform(X_lat_train) if X_lat_train.shape[0] > 0 else X_lat_train
-    X_lat_test_scaled  = scaler_lat.transform(X_lat_test) if X_lat_test.shape[0] > 0 else X_lat_test
-    X_cond_train_scaled= scaler_cond.transform(X_cond_train) if X_cond_train.shape[0] > 0 else X_cond_train
-    X_cond_test_scaled = scaler_cond.transform(X_cond_test) if X_cond_test.shape[0] > 0 else X_cond_test
-
-
-    cond_dim  = X_cond_train_scaled.shape[1]
-    noise_dim = 128
-
-    X_lat_train_cgan_input = X_lat_train_scaled
 
 class SpectralNormalization(Wrapper):
     def __init__(self, layer, power_iterations=1, **kwargs):
@@ -1789,16 +1852,21 @@ class MinibatchDiscrimination(Layer):
         M = tf.matmul(x, self.T)                                      # (B, K*D)
         M = tf.reshape(M, (-1, self.num_kernels, self.kernel_dim))    # (B, K, D)
 
-        # |M_i - M_j| for each pair (i,j) along kernel dim
         M1 = tf.expand_dims(M, 0)                                     # (1, B, K, D)
         M2 = tf.expand_dims(M, 1)                                     # (B, 1, K, D)
-        abs_diff = tf.reduce_sum(tf.abs(M1 - M2), axis=3)             # (B, B, K)
 
-        # c_b(x_i, x_j) = exp(-|M_i - M_j|);  o_b(x_i) = sum_j c_b
+        abs_diff = tf.reduce_sum(tf.abs(M1 - M2), axis=3)             # (B, B, K)
         c_b = tf.exp(-abs_diff)                                       # (B, B, K)
+
+        # Remove self-similarity on the diagonal.
+        batch_size = tf.shape(x)[0]
+        mask = 1.0 - tf.eye(batch_size)
+        mask = tf.expand_dims(mask, axis=-1)
+        c_b = c_b * mask
+
         o_b = tf.reduce_sum(c_b, axis=1)                              # (B, K)
 
-        return tf.concat([x, o_b], axis=1)                            # (B, in_dim + K)
+        return tf.concat([x, o_b], axis=1)
 
     def compute_output_shape(self, input_shape):
         return (input_shape[0], int(input_shape[-1]) + self.num_kernels)
@@ -1908,7 +1976,9 @@ def build_critic_DualAttn(lat_d, cond_d):
     x = LeakyReLU(alpha=0.2)(x)
 
     # 5) FINAL LINEAR OUTPUT  (NOT sigmoid) ― WGAN-GP value.
-    validity_output = Dense(1, activation=None, name="disc_output")(x)
+    validity_output = SpectralNormalization(
+    Dense(1, activation=None, name="disc_output")
+    )(x)
     return Model([latent_input, c_input], validity_output,
                  name="Critic_DualAttn")
 
@@ -2485,8 +2555,9 @@ else:
     print("CGAN training skipped or failed. No validation performed.")
 
 fid_threshold = 0.8
-if fid_val > fid_threshold:
+if 'fid_val' in globals() and fid_val > fid_threshold:
     print(f"\n[Warning] FID is too high (<{fid_threshold}). Additional validation is performed.")
+
 
     try:
         from sklearn.manifold import TSNE
@@ -2509,7 +2580,7 @@ if fid_val > fid_threshold:
     try:
         extra_n = min(5000, X_lat_train_scaled.shape[0])
         noise_extra = np.random.normal(0,1,(extra_n, noise_dim))
-        cond_extra = scaler_cond.transform(X_cond[test_idx][:extra_n])
+        cond_extra = X_cond_train_scaled[:extra_n]
         fake_extra_scaled = G_lat.predict([noise_extra, cond_extra], verbose=0)
         fake_extra = scaler_lat.inverse_transform(fake_extra_scaled)
         real_extra = real_lat[:extra_n]
@@ -2605,11 +2676,85 @@ def calculate_standard_precision_recall_f1(recommended_routes, ground_truth_pois
 # -----------------------------------------------
 # 18. Recommended function: “CGAN Latent → POI sequence”
 # -----------------------------------------------
-def recommend_routes_enhanced(target_user_id, pois_to_exclude=None, top_k_pois_per_route=3, num_gen_routes=3, lambda_mmr=0.7):
-    if 'G_lat' not in globals() or not G_lat: return {}
-    if target_user_id not in combined_user_emb: return {}
+def safe_cosine_sim(a, b):
+    """
+    Safe cosine similarity for vectors with possible zero norm or slight
+    dimensional mismatch.
+    """
+    a = np.asarray(a).reshape(-1)
+    b = np.asarray(b).reshape(-1)
 
-    enhanced_cond_vec = create_collaborative_condition_vector(target_user_id, sim_user_model, user_ids_pref_knn)
+    min_dim = min(a.shape[0], b.shape[0])
+    a = a[:min_dim]
+    b = b[:min_dim]
+
+    if np.linalg.norm(a) == 0 or np.linalg.norm(b) == 0:
+        return 0.0
+
+    return 1.0 - cosine(a, b)
+
+
+def mmr_anchor_expand_score(candidate_poi, route_sequence, gen_latent,
+                            target_user_id, alpha_rel=0.6, alpha_coh=0.4,
+                            beta_div=0.2, gamma_ser=0.2):
+    """
+    Thesis-aligned Anchor-and-Expand scoring.
+
+    It combines:
+    - relevance to generated latent concept
+    - coherence with previous POI
+    - diversity penalty against current route
+    - serendipity bonus for novel and thematically relevant POIs
+    """
+    candidate_emb = place_emb[candidate_poi]
+    last_emb = place_emb[route_sequence[-1]]
+
+    relevance = safe_cosine_sim(candidate_emb, gen_latent)
+    coherence = safe_cosine_sim(candidate_emb, last_emb)
+
+    if route_sequence:
+        sims_to_route = [
+            safe_cosine_sim(candidate_emb, place_emb[p])
+            for p in route_sequence
+            if p in place_emb
+        ]
+        diversity_penalty = max(sims_to_route) if sims_to_route else 0.0
+    else:
+        diversity_penalty = 0.0
+
+    historical = user_visited_places.get(target_user_id, set())
+    is_novel = candidate_poi not in historical
+
+    serendipity_bonus = 0.0
+
+    if is_novel and target_user_id in user_preferences:
+        rels = [
+            user_preferences[target_user_id].get(th, 0.0)
+            for th in place_themes.get(candidate_poi, [])
+        ]
+        serendipity_bonus = float(np.mean(rels)) if rels else 0.0
+
+    total_score = (
+        alpha_rel * relevance
+        + alpha_coh * coherence
+        - beta_div * diversity_penalty
+        + gamma_ser * serendipity_bonus
+    )
+
+    return float(total_score)
+
+
+def recommend_routes_enhanced(target_user_id, pois_to_exclude=None, top_k_pois_per_route=3, num_gen_routes=3, lambda_mmr=0.7):
+    if 'G_lat' not in globals() or not G_lat:
+        return {}
+
+    if target_user_id not in combined_user_emb:
+        print(
+            f"[Cold-start] User {target_user_id} not found in trained embeddings. "
+            f"Using population-level fallback condition vector."
+        )
+
+    enhanced_cond_vec = create_condition_vector_safe(target_user_id)
     cond_vec_scaled = scaler_cond.transform(enhanced_cond_vec.reshape(1, -1))
     noise_for_gen = np.random.normal(0, 1, (num_gen_routes, noise_dim))
     generated_latents_scaled = G_lat.predict([noise_for_gen, cond_vec_scaled.repeat(num_gen_routes, axis=0)], verbose=0)
@@ -2633,7 +2778,7 @@ def recommend_routes_enhanced(target_user_id, pois_to_exclude=None, top_k_pois_p
         for latent_vec in generated_latents:
             best_anchor, max_relevance = None, -1.0
             for poi in anchor_candidates:
-                rel = 1 - cosine(place_emb[poi], latent_vec)
+                rel = safe_cosine_sim(place_emb[poi], latent_vec)
                 if rel > max_relevance:
                     best_anchor, max_relevance = poi, rel
             if best_anchor:
@@ -2665,16 +2810,22 @@ def recommend_routes_enhanced(target_user_id, pois_to_exclude=None, top_k_pois_p
             next_poi = None
             max_score = -1
             
-            last_poi_in_route_emb = place_emb[route_sequence[-1]]
-            
             for candidate_poi in expansion_candidates:
-                candidate_emb = place_emb[candidate_poi]
-                score = (1 - cosine(candidate_emb, gen_latent)) * 0.6 + \
-                        (1 - cosine(candidate_emb, last_poi_in_route_emb)) * 0.4
+                score = mmr_anchor_expand_score(
+                    candidate_poi,
+                    route_sequence,
+                    gen_latent,
+                    target_user_id,
+                    alpha_rel=0.6,
+                    alpha_coh=0.4,
+                    beta_div=0.2,
+                    gamma_ser=0.2
+                )
 
                 if score > max_score:
                     max_score = score
                     next_poi = candidate_poi
+
             
             if next_poi:
                 route_sequence.append(next_poi)
@@ -2819,6 +2970,161 @@ def plot_cgan_recommended_routes_on_folium(recs, place_to_coord, last_poi, filep
     folium.LayerControl().add_to(m)
     m.save(filepath)
     print(f"Recommended routes map saved to '{filepath}'.")
+
+def compute_theme_relevance(user_id, recommended_routes, user_preferences, all_themes_list):
+    """
+    Theme Relevance used in F1-Discovery.
+    Cosine similarity between user's theme preference vector and
+    recommended route theme vector.
+    """
+    if user_id not in user_preferences:
+        return 0.0
+
+    user_vec = np.array([
+        user_preferences[user_id].get(theme, 0.0)
+        for theme in all_themes_list
+    ], dtype=float)
+
+    rec_counter = Counter()
+    total = 0
+
+    for route in recommended_routes:
+        for poi in route.get("sequence", []):
+            if poi in place_themes:
+                total += 1
+                for th in place_themes[poi]:
+                    if th in all_themes_list:
+                        rec_counter[th] += 1
+
+    if total == 0:
+        return 0.0
+
+    rec_vec = np.array([
+        rec_counter.get(theme, 0) / total
+        for theme in all_themes_list
+    ], dtype=float)
+
+    denom = np.linalg.norm(user_vec) * np.linalg.norm(rec_vec)
+
+    if denom == 0:
+        return 0.0
+
+    return float(np.dot(user_vec, rec_vec) / denom)
+
+
+def compute_novelty(user_id, recommended_routes, df, moving_cols):
+    """
+    Novelty = |Recommended \\ GroundTruth| / |Recommended|
+    """
+    historical = get_user_ground_truth_pois(user_id, df, moving_cols)
+
+    rec_pois = []
+
+    for route in recommended_routes:
+        rec_pois.extend([
+            normalize_poi_name(p)
+            for p in route.get("sequence", [])
+        ])
+
+    if not rec_pois:
+        return 0.0
+
+    novel = [p for p in rec_pois if p not in historical]
+
+    return len(novel) / len(rec_pois)
+
+
+def compute_f1_discovery(user_id, recommended_routes, df, moving_cols,
+                         user_preferences, all_themes_list):
+    """
+    F1-Discovery = harmonic mean of Novelty and Theme Relevance.
+    """
+    novelty = compute_novelty(
+        user_id,
+        recommended_routes,
+        df,
+        moving_cols
+    )
+
+    theme_rel = compute_theme_relevance(
+        user_id,
+        recommended_routes,
+        user_preferences,
+        all_themes_list
+    )
+
+    if novelty + theme_rel == 0:
+        return 0.0
+
+    return 2.0 * novelty * theme_rel / (novelty + theme_rel)
+
+
+def compute_diversity(recommended_routes, place_emb):
+    """
+    Diversity = mean pairwise dissimilarity among recommended POIs.
+    """
+    pois = []
+
+    for route in recommended_routes:
+        for poi in route.get("sequence", []):
+            if poi in place_emb:
+                pois.append(poi)
+
+    pois = list(dict.fromkeys(pois))
+
+    if len(pois) < 2:
+        return 0.0
+
+    vals = []
+
+    for i in range(len(pois)):
+        for j in range(i + 1, len(pois)):
+            v1 = place_emb[pois[i]]
+            v2 = place_emb[pois[j]]
+
+            if np.linalg.norm(v1) == 0 or np.linalg.norm(v2) == 0:
+                continue
+
+            sim = safe_cosine_sim(v1, v2)
+            dissim = 1.0 - sim
+            vals.append(dissim)
+
+    return float(np.mean(vals)) if vals else 0.0
+
+
+def compute_serendipity(user_id, recommended_routes, df, moving_cols,
+                        user_preferences, all_themes_list):
+    """
+    Serendipity = average relevance of novel recommendations.
+    """
+    historical = get_user_ground_truth_pois(user_id, df, moving_cols)
+
+    if user_id not in user_preferences:
+        return 0.0
+
+    user_pref = user_preferences[user_id]
+    novel_relevance = []
+
+    for route in recommended_routes:
+        for poi in route.get("sequence", []):
+            norm_poi = normalize_poi_name(poi)
+
+            if norm_poi in historical:
+                continue
+
+            if poi not in place_themes:
+                continue
+
+            rel_scores = [
+                user_pref.get(th, 0.0)
+                for th in place_themes[poi]
+            ]
+
+            if rel_scores:
+                novel_relevance.append(np.mean(rel_scores))
+
+    return float(np.mean(novel_relevance)) if novel_relevance else 0.0
+
 
 def evaluate_theme_preference_strict(user_id, recommended_routes, user_preferences, all_themes_list):
     if user_id not in user_preferences:
@@ -3234,6 +3540,49 @@ if __name__ == '__main__':
             print(f"    ▶ Pairs Precision (P_pair): {pairs_f1_results['P_pair']:.4f}")
             print(f"    ▶ Pairs Recall (R_pair):    {pairs_f1_results['R_pair']:.4f}")
             print(f"    ▶ Pairs F1-Score:           {pairs_f1_results['pairs_f1']:.4f}")
+
+                        # =========================================================================
+            # Thesis generative metrics: F1-Discovery, Diversity, Novelty, Serendipity
+            # =========================================================================
+            f1_discovery_val = compute_f1_discovery(
+                user_id,
+                recommendations['recommended_routes'],
+                df,
+                moving_cols,
+                user_preferences,
+                all_themes
+            )
+
+            diversity_val = compute_diversity(
+                recommendations['recommended_routes'],
+                place_emb
+            )
+
+            novelty_val = compute_novelty(
+                user_id,
+                recommendations['recommended_routes'],
+                df,
+                moving_cols
+            )
+
+            serendipity_val = compute_serendipity(
+                user_id,
+                recommendations['recommended_routes'],
+                df,
+                moving_cols,
+                user_preferences,
+                all_themes
+            )
+
+            all_metrics['f1_discovery'].append(f1_discovery_val)
+            all_metrics['diversity'].append(diversity_val)
+            all_metrics['novelty'].append(novelty_val)
+            all_metrics['serendipity'].append(serendipity_val)
+
+            print(f"    ▶ F1-Discovery: {f1_discovery_val:.4f}")
+            print(f"    ▶ Diversity:    {diversity_val:.4f}")
+            print(f"    ▶ Novelty:      {novelty_val:.4f}")
+            print(f"    ▶ Serendipity:  {serendipity_val:.4f}")
             # =========================================================================
 
         # --- Final summary output ---
@@ -3242,13 +3591,17 @@ if __name__ == '__main__':
         print(f"Total users processed: {len(sample_user_ids)}")
 
         summary_metrics = {
+            "F1-Discovery": "f1_discovery",
             "Precision": "precision",
             "Recall": "recall",
             "F1-Score": "f1_score",
-            "Theme Profile Accuracy (Cosine)": "theme_profile_accuracy",
+            "pairs-F1": "pairs_f1",
+            "Diversity": "diversity",
+            "Novelty": "novelty",
+            "Serendipity": "serendipity",
+            "Theme Profile Accuracy": "theme_profile_accuracy",
             "Theme Profile RMSE": "rmse",
             "Theme Profile MAE": "mae",
-            "Pairs F1-Score": "pairs_f1"
         }
 
         for display_name, metric_key in summary_metrics.items():
